@@ -404,7 +404,7 @@ def search_start_point(A, B, inside=True, NFP=None):
     B = copy.deepcopy(B)
 
     for i in range(0, len(A['points'])-1):
-        if not A['points'][i]['marked']:
+        if not A['points'][i].get('marked'):
             A['points'][i]['marked'] = True
             for j in range(0, len(B['points'])):
                 B['offsetx'] = A['points'][i]['x'] - B['points'][j]['x']
@@ -522,7 +522,7 @@ def point_in_polygon(point, polygon):
             # ignore very small lines
             continue
 
-        intersect = ((yi > point['y']) != (yj > point.y)) and (point['x'] < (xj - xi) * (point['y'] - yi) / (yj - yi) + xi)
+        intersect = ((yi > point['y']) != (yj > point['y'])) and (point['x'] < (xj - xi) * (point['y'] - yi) / (yj - yi) + xi)
         if intersect:
             inside = not inside
 
@@ -530,7 +530,7 @@ def point_in_polygon(point, polygon):
 
 
 def intersect(A, B):
-    area = 0
+
     a_offsetx = A['offsetx'] or 0
     a_offsety = A['offsety'] or 0
 
@@ -545,11 +545,11 @@ def intersect(A, B):
         for j in range(0, len_b - 1):
             a1 = {'x': A['points'][i]['x']+a_offsetx, 'y': A['points'][i]['y']+a_offsety}
             a2 = {'x': A['points'][i+1]['x']+a_offsetx, 'y': A['points'][i+1]['y']+a_offsety}
-            b1 = {'x': B['points'][j]['x']+b_offsetx, 'y': B['points'][i]['y']+b_offsety}
+            b1 = {'x': B['points'][j]['x']+b_offsetx, 'y': B['points'][j]['y']+b_offsety}
             b2 = {'x': B['points'][j+1]['x']+b_offsetx, 'y': B['points'][j+1]['y']+b_offsety}
 
-            pre_vb_index = len_b if j == 0 else j - 1
-            pre_va_index = len_a if i == 0 else i - 1
+            pre_vb_index = len_b - 1 if j == 0 else j - 1
+            pre_va_index = len_a - 1 if i == 0 else i - 1
             next_b_index = 0 if j + 1 == len_b - 1 else j + 2
             next_a_index = 0 if i + 1 == len_a - 1 else i + 2
 
@@ -582,8 +582,8 @@ def intersect(A, B):
 
             if on_segment(a1, a2, b1) or almost_equal(a1['x'], b1['x']) and almost_equal(a1['y'], b1['y']):
                 # if a point is on a segment, it could intersect or it could not. Check via the neighboring points
-                b0in  = A['polygon'].isInside(b0['x'], b0['y'])
-                b2in = A['polygon'].isInside(b2['x'], b2['y'])
+                b0in = point_in_polygon(b0, A)
+                b2in = point_in_polygon(b2, A)
                 if (b0in and not b2in) or (not b0in and b2in):
                     return True
                 else:
@@ -591,8 +591,8 @@ def intersect(A, B):
 
             if on_segment(a1, a2, b2) or almost_equal(a2['x'], b2['x']) and almost_equal(a2['y'], b2['y']):
                 # if a point is on a segment, it could intersect or it could not.Check via the neighboring points
-                b1in = A['polygon'].isInside(b1['x'], b1['y'])
-                b3in = A['polygon'].isInside(b3['x'], b3['y'])
+                b1in = point_in_polygon(b1, A)
+                b3in = point_in_polygon(b3, A)
                 if (b1in and not b3in) or (not b1in and b3in):
                     return True
                 else:
@@ -600,8 +600,8 @@ def intersect(A, B):
 
             if on_segment(b1, b2, a1) or almost_equal(a1['x'], b2['x']) and almost_equal(a1['y'], b2['y']):
                 # if a point is on a segment, it could intersect or it could not.Check via the neighboring points
-                a0in = B['polygon'].isInside(a0['x'], a0['y'])
-                a2in = B['polygon'].isInside(a2['x'], a2['y'])
+                a0in = point_in_polygon(a0, B)
+                a2in = point_in_polygon(a2, B)
                 if (a0in and not a2in) or (not a0in and a2in):
                     return True
                 else:
@@ -609,8 +609,8 @@ def intersect(A, B):
 
             if on_segment(b1, b2, a2) or almost_equal(a2['x'], b1['x']) and almost_equal(a2['y'], b1['y']):
                 # if a point is on a segment, it could intersect or it could not.Check via the neighboring points
-                a1in = B['polygon'].isInside(a1['x'], a1['y'])
-                a3in = B['polygon'].isInside(a3['x'], a3['y'])
+                a1in = point_in_polygon(a1, B)
+                a3in = point_in_polygon(a3, B)
                 if (a1in and not a3in) or (not a1in and a3in):
                     return True
                 else:
@@ -640,8 +640,9 @@ def line_intersect(A, B, E, F,infinite=None):
     a2 = F['y'] - E['y']
     b2 = E['x'] - F['y']
     c2 = F['x'] * E['y'] - E['x'] * F['y']
-
     denom = a1 * b2 - a2 * b1
+    if denom == 0:
+        return None
     x = (b1 * c2 - b2 * c1) / denom
     y = (a2 * c1 - a1 * c2) / denom
 
@@ -689,7 +690,7 @@ def polygon_projection_distance(A, B, direction):
     for i in range(0, len(edge_b)):
         # the shortest/most negative projection of B onto A
         min_projection = minp = None
-        for j in range(0, len(reversed) - 1):
+        for j in range(0, len(edge_a) - 1):
             p['x'] = edge_b[i]['x'] + b_offsetx
             p['y'] = edge_b[i]['y'] + b_offsety
             s1['x'] = edge_a[j]['x'] + a_offsetx
@@ -704,7 +705,6 @@ def polygon_projection_distance(A, B, direction):
             d = point_distance(p, s1, s2, direction)
             if d and (min_projection is None or d < min_projection):
                 min_projection = d
-                minp = p
 
         if min_projection and (distance is None or min_projection > distance):
             distance = min_projection
@@ -760,18 +760,11 @@ def polygon_slide_distance(A, B, direction, ignorenegative):
     edge_a = A['points']
     edge_b = B['points']
     distance = None
-    p = dict()
-    s1 = dict()
-    s2 = dict()
 
     dir_point = normalize_vector(direction)
-    normal = {
-        'x': dir_point['x'],
-        'y': -dir_point['y']
-    }
 
     for i in range(0, len(edge_b) - 1):
-        mind = None
+
         for j in range(0, len(edge_a) - 1):
             A1 = {'x': edge_a[j]['x'] + a_offsetx, 'y': edge_a[j]['y'] + a_offsety}
             A2 = {'x': edge_a[j+1]['x'] + a_offsetx, 'y': edge_a[j+1]['y'] + a_offsety}
@@ -808,11 +801,6 @@ def segment_distance(A, B, E, F, direction):
     cross_b = B['x'] * direction['x'] + B['y'] * direction['y']
     cross_e = E['x'] * direction['x'] + E['y'] * direction['y']
     cross_f = F['x'] * direction['x'] + F['y'] * direction['y']
-
-    cross_ab_min = min(cross_a, cross_b)
-    cross_ab_max = max(cross_a, cross_b)
-    cross_EF_min = min(cross_e, cross_f)
-    cross_EF_max = max(cross_e, cross_f)
 
     ab_min = min(dot_a, dot_b)
     ab_max = max(dot_a, dot_b)

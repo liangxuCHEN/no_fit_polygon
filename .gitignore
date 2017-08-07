@@ -5,4 +5,5 @@
 *.png
 *.gpf
 *.dxf
+/dxf_file
 .idea/

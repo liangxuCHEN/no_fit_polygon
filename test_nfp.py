@@ -6,15 +6,14 @@ import json
 import random
 import copy
 from Polygon import Polygon
-from Polygon.IO import writeSVG
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import pyclipper
+from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
+from matplotlib.figure import Figure
 
-
-TOLERANCE = 0.0001  # smaller than this, two points are considered equal
-DISCRETIZE = 4  # the number of segments in which arcs must be subdivided
-ROTATIONS = [0, 90, 180, 270]  # the possible rotations to try
+SPACING = 2
+ROTATIONS = 4
 
 
 class Nester:
@@ -31,29 +30,28 @@ class Nester:
            n.show() # creates a preview (compound) of the results
            """
 
-        self.container = container
-        self.bin_bounds = None
-        self.shapes = shapes
-        self.results = []  # storage for the different results
+        self.container = container  # 承载组件的容器
+        self.shapes = shapes        # 组件信息
+        self.results = list()  # storage for the different results
         self.indexedFaces = None
         self.setCounter = None  # optionally define a setCounter(value) function where value is a %
         self.nfpCache = {}
-        self.parts = None
+        # 遗传算法的参数
         self.config = {
             'curveTolerance': 0.3,  # 允许的最大误差转换贝济耶和圆弧线段。在SVG的单位。更小的公差将需要更长的时间来计算
-            'spacing': 3,
-            'rotations': 4,
+            'spacing': SPACING,           # 组件间的间隔
+            'rotations': ROTATIONS,         # 旋转的颗粒度，360°的n份，如：4 = [0, 90 ,180, 270]
             'populationSize': 10,
-            'mutationRate': 10,
-            'useHoles': True,
+            'mutationRate': 15,
+            'useHoles': False,
             'exploreConcave': False  # 寻找凹面
         }
 
         self.working = False
-
         self.GA = None
         self.best = None
         self.worker = None
+        self.container_bounds = None   # 容器的最小包络矩形作为输出图的坐标
 
 
     def addObjects(self, objects):
@@ -106,6 +104,7 @@ class Nester:
 
         self.container['width'] = xbinmax - xbinmin
         self.container['height'] = ybinmax - ybinmin
+        self.container_bounds = nfp_utls.get_polygon_bounds(self.container['points'])
 
     def clear(self):
 
@@ -118,9 +117,6 @@ class Nester:
         """run(): Runs a nesting operation. Returns a list of lists of
            shapes, each primary list being one filled container, or None
            if the operation failed."""
-        # reset abort mechanism and variables
-
-        # general conformity tests
         if not self.container:
             print("Empty container. Aborting")
             return
@@ -140,47 +136,47 @@ class Nester:
         # build a clean copy so we don't touch the original
         # order by area
         faces = sorted(faces, reverse=True, key=lambda face: face[1]['area'])
-        self.bin_bounds = self.container['points']
         return self.launch_workers(faces)
 
     def launch_workers(self, adam):
 
         if self.GA is None:
-            print('========== new ga')
             offset_bin = copy.deepcopy(self.container)
             offset_bin['points'] = self.polygon_offset(self.container['points'], self.config['spacing'])
             self.GA = geneticAlgorithm(adam, offset_bin, self.config)
+        else:
+            self.GA.generation()
 
-        individual = None
-        # 评估每个结果的适应值,多线程
-        # for i in range(0, self.GA.config['populationSize']):
-        #     if not self.GA.population[i].get('fitness'):
-        #         individual = self.GA.population[i]
-        #         print '===================GA population id %d' % i
-        #     break
-        #
-        # if individual is None:
-        #     # all individuals have been evaluated, start next generation
-        #     self.GA.generation()
-        #     individual = self.GA.population[1]
-        res = list()
+        print self.GA.population
         for i in range(0, self.GA.config['populationSize']):
-            res.append(self.find_fitness(self.GA.population[i]))
-            self.GA.population[i]['fitness'] = res[-1]['fitness']
+            res = self.find_fitness(self.GA.population[i])
+            self.GA.population[i]['fitness'] = res['fitness']
+            self.results.append(res)
             # self.nfpCache.clear()
 
-        self.show_result(res)
+        # 找最佳结果
+        if len(self.results) > 0:
+            best_result = self.results[0]
+            print '=========one time======='
+
+            for p in self.results:
+                print p['fitness']
+                if p['fitness'] < best_result['fitness']:
+                    best_result = p
+
+            if self.best is None or best_result['fitness'] < self.best['fitness']:
+                self.best = best_result
+                print 'change best', best_result['fitness']
 
     def find_fitness(self, individual):
-        place_list = individual['placement']
-        rotations = individual['rotation']
+        place_list = copy.deepcopy(individual['placement'])
+        rotations = copy.deepcopy(individual['rotation'])
         ids = [p[0] for p in place_list]
         for i in range(0, len(place_list)):
             place_list[i].append(rotations[i])
 
         nfp_pairs = list()
         newCache = dict()
-        key = None
         for i in range(0, len(place_list)):
             part = place_list[i]
             key = {
@@ -224,9 +220,9 @@ class Nester:
         # only keep cache for one cycle
         self.nfpCache = newCache
         # 另外的线程去排列图形
-        if self.worker is None:
-            self.worker = placement_worker.PlacementWorker(
-                 self.container, place_list, ids, rotations, self.config, self.nfpCache)
+
+        self.worker = placement_worker.PlacementWorker(
+             self.container, place_list, ids, rotations, self.config, self.nfpCache)
 
         # TODO 多个基因的平行运算
         pair_list = list()
@@ -260,7 +256,8 @@ class Nester:
                     if nfp_utls.polygon_area(nfp[i]) > 0:
                         nfp[i].reverse()
             else:
-                print('NFP Warning:', pair['key'])
+                pass
+                # print('NFP Warning:', pair['key'])
 
         else:
             if search_edges:
@@ -270,7 +267,8 @@ class Nester:
 
             # sanity check
             if nfp is None or len(nfp) == 0:
-                print('error in NFP 260')
+                pass
+                # print('error in NFP 260')
                 # print('NFP Error:', pair['key'])
                 # print('A;', A)
                 # print('B:', B)
@@ -280,7 +278,8 @@ class Nester:
                 # if searchedges is active, only the first NFP is guaranteed to pass sanity check
                 if not search_edges or i == 0:
                     if abs(nfp_utls.polygon_area(nfp[i])) < abs(nfp_utls.polygon_area(A['points'])):
-                        print('error in NFP area 269')
+                        pass
+                        # print('error in NFP area 269')
                         # print('NFP Area Error: ', abs(nfp_utls.polygon_area(nfp[i])), pair['key'])
                         # print('NFP:', json.dumps(nfp[i]))
                         # print('A: ', A)
@@ -311,26 +310,18 @@ class Nester:
     def generate_nfp(self, nfp):
         if nfp:
             for i in range(0, len(nfp)):
+
                 if nfp[i]:
                     key = json.dumps(nfp[i]['key'])
                     self.nfpCache[key] = nfp[i]['value']
 
-        self.worker.nfpCache.update(self.nfpCache)
+        # worker 的 nfp cashe 只保留一次
+        self.worker.nfpCache = copy.deepcopy(self.nfpCache)
+        # self.worker.nfpCache.update(self.nfpCache)
         return self.worker.place_paths()
 
-    def show_result(self, res):
-        if len(res) > 0:
-            best_result = res[0]
-
-            for p in res:
-                print p['fitness']
-                if p['fitness'] < best_result['fitness']:
-                    best_result = p
-
-            if self.best is None or best_result['fitness'] > self.best['fitness']:
-                self.best = best_result
-                print self.best
-                draw_svg(self.best['placements'], self.shapes, self.container)
+    def show_result(self):
+        draw_result(self.best['placements'], self.shapes, self.container, self.container_bounds)
 
     def polygon_offset(self, polygon, offset):
         is_list = True
@@ -345,7 +336,6 @@ class Nester:
         if not is_list:
             result = [{'x': p[0], 'y':p[1]} for p in result[0]]
         return result
-
 
     def clean_polygon(self, polygon):
         simple = pyclipper.SimplifyPolygon(polygon, pyclipper.PFT_NONZERO)
@@ -367,27 +357,34 @@ class Nester:
         return clean
 
 
-def draw_svg(shift_data, polygons, bin_polygon):
-    if isinstance(polygons, Polygon):
-        shapes = copy.deepcopy(polygons)
-    else:
-        shapes = list()
-        for polygon in polygons:
-            contour = [[p['x'], p['y']] for p in polygon['points']]
-            shapes.append(Polygon(contour))
+def draw_result(shift_data, polygons, bin_polygon, bin_bounds):
 
-        shapes.append(Polygon([[p['x'], p['y']] for p in bin_polygon['points']]))
+    shapes = list()
+    for polygon in polygons:
+        contour = [[p['x'], p['y']] for p in polygon['points']]
+        shapes.append(Polygon(contour))
 
-    # writeSVG('T3_2_0.svg', shapes, width=600)
+    bin_shape = Polygon([[p['x'], p['y']] for p in bin_polygon['points']])
+    shape_area = bin_shape.area(0)
+
+    # TODO:多块bin
+    solution = list()
+    rates = list()
     for s_data in shift_data:
+        tmp_bin = list()
+        total_area = 0.0
         for move_step in s_data:
             if move_step['rotation'] <> 0:
-                #center = shapes[int(move_step['p_id'])].center(0)
+                # 坐标原点旋转
                 shapes[int(move_step['p_id'])].rotate(math.pi / 180 * move_step['rotation'], 0, 0)
             shapes[int(move_step['p_id'])].shift(move_step['x'], move_step['y'])
+            tmp_bin.append(shapes[int(move_step['p_id'])])
+            total_area += shapes[int(move_step['p_id'])].area(0)
+        rates.append(total_area / shape_area)
+        solution.append(tmp_bin)
 
-
-    draw_polygon(shapes)
+    print rates
+    draw_polygon(solution, rates, bin_bounds, bin_shape)
     #writeSVG('T3_6.svg', shapes, width=400)
 
 
@@ -402,10 +399,11 @@ class geneticAlgorithm():
         self.config = config
         self.bin_polygon = bin_polygon
         angles = list()
-        for shape in adam:
+        shapes = copy.deepcopy(adam)
+        for shape in shapes:
             angles.append(self.random_angle(shape))
 
-        self.population = [{'placement': adam, 'rotation': angles}]
+        self.population = [{'placement': shapes, 'rotation': angles}]
 
         for i in range(1, self.config['populationSize']):
             mutant = self.mutate(self.population[0])
@@ -450,7 +448,7 @@ class geneticAlgorithm():
 
     def generation(self):
         # 适应度 从大到小排序
-        self.population = sorted(self.population, reverse=True, key=lambda a: a['fitness'])
+        self.population = sorted(self.population, key=lambda a: a['fitness'])
         new_population = [self.population[0]]
         while len(new_population) < self.config['populationSize']:
             male = self.random_weighted_individual()
@@ -464,6 +462,7 @@ class geneticAlgorithm():
             if len(new_population) < self.config['populationSize']:
                 new_population.append(self.mutate(children[1]))
 
+        print 'new :', new_population
         self.population = new_population
 
     def random_weighted_individual(self, exclude=None):
@@ -473,7 +472,7 @@ class geneticAlgorithm():
 
         rand = random.random()
         lower = 0
-        weight = 1 / len(pop)
+        weight = 1.0 / len(pop)
         upper = weight
         pop_len = len(pop)
         for i in range(0, pop_len):
@@ -497,12 +496,12 @@ class geneticAlgorithm():
                     return True
             return False
 
-        for i in range(len(female['placement']), 0, -1):
+        for i in range(len(female['placement'])-1, -1, -1):
             if not contains(gene1, female['placement'][i][0]):
                 gene1.append(female['placement'][i])
                 rot1.append(female['rotation'][i])
 
-        for i in range(len(male['placement']),0, -1):
+        for i in range(len(male['placement'])-1, -1, -1):
             if not contains(gene2, male['placement'][i][0]):
                 gene2.append(male['placement'][i])
                 rot2.append(male['rotation'][i])
@@ -530,33 +529,122 @@ def minkowski_difference(A, B):
     return [clipper_nfp]
 
 
-def draw_polygon(shapes):
-    ax = plt.axes()
-    ax.set_xlim(-10, 1500)
-    ax.set_ylim(-10, 1500)
-    output_obj = list()
-    output_obj.append(patches.Polygon(shapes[-1].contour(0), fc='green'))
-    print shapes[-1].contour(0)
-    shapes.pop(-1)
+def draw_polygon_png(solution, bin_bounds, bin_shape, path=None):
+    base_width = 8
+    base_height = base_width * bin_bounds['height'] / bin_bounds['width']
+    num_bin = len(solution)
+    fig_height = num_bin * base_height
+    fig1 = Figure(figsize=(base_width, fig_height))
+    fig1.suptitle('Polygon packing', fontweight='bold')
+    FigureCanvas(fig1)
 
-    for s in shapes:
-        print s.contour(0)
-        # x, y ,w, h =  s.boundingBox()
-        # output_obj.append(patches.Rectangle((x, y), w, h, fc='green'))
-        output_obj.append(patches.Polygon(s.contour(0), fc='yellow', lw=1, edgecolor='m'))
-    # corner_points_2, hull_points 是最终坐标，然后通过新的坐标
-    for p in output_obj:
-        ax.add_patch(p)
-    plt.gca().set_aspect('equal')
-    plt.title('Rate')
+    i_pic = 1   # 记录图片的索引
+    for shapes in solution:
+        # 坐标设置
+        ax = fig1.add_subplot(num_bin, 1, i_pic, aspect='equal')
+        ax.set_title('Num %d bin' % i_pic)
+        i_pic += 1
+        ax.set_xlim(bin_bounds['x']-10, bin_bounds['width']+50)
+        ax.set_ylim(bin_bounds['y']-10, bin_bounds['height']+50)
+
+        output_obj = list()
+        output_obj.append(patches.Polygon(bin_shape.contour(0), fc='green'))
+        for s in shapes[:-1]:
+            output_obj.append(patches.Polygon(s.contour(0), fc='yellow', lw=1, edgecolor='m'))
+        for p in output_obj:
+            ax.add_patch(p)
+
+    if path is None:
+        path = 'example'
+
+    fig1.savefig('%s.png' % path)
+
+
+def draw_polygon(solution, rates, bin_bounds, bin_shape):
+    base_width = 8
+    base_height = base_width * bin_bounds['height'] / bin_bounds['width']
+    num_bin = len(solution)
+    fig_height = num_bin * base_height
+    fig1 = plt.figure(figsize=(base_width, fig_height))
+    fig1.suptitle('Polygon packing', fontweight='bold')
+
+    i_pic = 1  # 记录图片的索引
+    for shapes in solution:
+        # 坐标设置
+        ax = plt.subplot(num_bin, 1, i_pic, aspect='equal')
+        ax.set_title('Num %d bin, rate is %0.4f' % (i_pic, rates[i_pic-1]))
+        i_pic += 1
+        ax.set_xlim(bin_bounds['x'] - 10, bin_bounds['width'] + 50)
+        ax.set_ylim(bin_bounds['y'] - 10, bin_bounds['height'] + 50)
+
+        output_obj = list()
+        output_obj.append(patches.Polygon(bin_shape.contour(0), fc='green'))
+        for s in shapes:
+            output_obj.append(patches.Polygon(s.contour(0), fc='yellow', lw=1, edgecolor='m'))
+        for p in output_obj:
+            ax.add_patch(p)
     plt.show()
+
+
+def content_loop_rate(best, n, loop_time=20):
+    res = best
+    run_time = loop_time
+    while run_time:
+        n.run()
+        best = n.best
+        print best['fitness']
+        if best['fitness'] <= res['fitness']:
+            res = best
+            print 'change', res['fitness']
+        run_time -= 1
+    draw_result(res['placements'], n.shapes, n.container, n.container_bounds)
+
+
+def set_target_loop(best, n):
+    res = best
+    total_area = 0
+    rate = None
+    num_placed = 0
+    while 1:
+        n.run()
+        best = n.best
+        print best['fitness']
+        if best['fitness'] <= res['fitness']:
+            res = best
+            for s_data in res['placements']:
+                tmp_total_area = 0.0
+                tmp_num_placed = 0
+
+                for move_step in s_data:
+                    tmp_total_area += n.shapes[int(move_step['p_id'])]['area']
+                    tmp_num_placed += 1
+
+                tmp_rates = tmp_total_area / abs(nfp_utls.polygon_area(n.container['points']))
+
+                if num_placed < tmp_num_placed or total_area < tmp_total_area or rate < tmp_rates:
+                    num_placed = tmp_num_placed
+                    total_area = tmp_total_area
+                    rate = tmp_rates
+                    print '--------- change --------'
+        print total_area, rate, num_placed, res['fitness']
+        print '---------next----------------'
+        # 全部图形放下才退出
+        if num_placed == len(n.shapes):
+            break
+    draw_result(res['placements'], n.shapes, n.container, n.container_bounds)
 
 if __name__ == '__main__':
     n = Nester()
-    s = input_utls.input_polygon('dxf_file/T4.dxf', is_class=False)
-    # writeSVG('T2_O.svg', s, width=600)
-
+    s = input_utls.input_polygon('dxf_file/R2651.5baibu.dxf')
     n.addObjects(s[1:])
     n.addContainer(s[0])
     n.run()
-    # n.show()
+
+    # 设计退出条件
+    res_list = list()
+    best = n.best
+    # set_target_loop(best, n)    # T6
+    content_loop_rate(best, n, loop_time=5)   # T7 , T4
+
+
+

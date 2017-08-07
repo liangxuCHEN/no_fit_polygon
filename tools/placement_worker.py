@@ -117,7 +117,7 @@ class PlacementWorker():
                         clone = [[np['x'] + placements[j]['x'], np['y'] + placements[j]['y']] for np in nfp[k]]
                         clone = pyclipper.CleanPolygon(clone)
                         area = abs(pyclipper.Area(clone))
-                        print 'clone area:', area
+                        # print 'clone area:', area
                         if len(clone) > 2:
                             clipper.AddPath(clone, pyclipper.PT_SUBJECT, True)
                 combine_nfp = clipper.Execute(pyclipper.CT_UNION, pyclipper.PFT_NONZERO, pyclipper.PFT_NONZERO)
@@ -126,7 +126,10 @@ class PlacementWorker():
 
                 clipper = pyclipper.Pyclipper()
                 clipper.AddPaths(combine_nfp, pyclipper.PT_CLIP, True)
-                clipper.AddPaths(clipper_bin_nfp, pyclipper.PT_SUBJECT, True)
+                try:
+                    clipper.AddPaths(clipper_bin_nfp, pyclipper.PT_SUBJECT, True)
+                except:
+                    print u'图形坐标出错', clipper_bin_nfp
 
                 # choose placement that results in the smallest bounding box
                 finalNfp = clipper.Execute(pyclipper.CT_DIFFERENCE, pyclipper.PFT_NONZERO, pyclipper.PFT_NONZERO)

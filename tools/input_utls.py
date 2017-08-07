@@ -1,6 +1,5 @@
 # coding=utf8
 import dxfgrabber
-from Polygon import Polygon
 
 
 def find_shape_from_dxf(file_name):
@@ -8,6 +7,7 @@ def find_shape_from_dxf(file_name):
     all_shapes = list()
     new_polygon = dict()
     for e in dxf.entities:
+        print e.dxftype
         if e.dxftype == 'LINE':
             # print (e.start, e.end)
             # 找封闭的多边形
@@ -47,7 +47,7 @@ def find_shape_from_dxf(file_name):
     return all_shapes
 
 
-def input_polygon(dxf_file, is_class=True):
+def input_polygon(dxf_file):
     """
     从文中
     :param dxf_file: 文件地址
@@ -58,17 +58,11 @@ def input_polygon(dxf_file, is_class=True):
     datas = find_shape_from_dxf(dxf_file)
     shapes = list()
 
-    if is_class:
-        for i in range(0, len(datas)):
-            p = Polygon()
-            shapes.append(p)
-            p.addContour(datas[i])
-        return shapes
-    else:
-        for i in range(0, len(datas)):
-            shapes.append(datas[i])
+    for i in range(0, len(datas)):
+        shapes.append(datas[i])
 
-        return shapes
+    print shapes
+    return shapes
 
 if __name__ == '__main__':
     s = find_shape_from_dxf('T2.dxf')
