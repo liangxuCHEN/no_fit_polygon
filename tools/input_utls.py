@@ -7,9 +7,12 @@ def find_shape_from_dxf(file_name):
     all_shapes = list()
     new_polygon = dict()
     for e in dxf.entities:
+        if e.dxftype == 'LWPOLYLINE':
+            # all_shapes.append(e.points)
+            print (e.points)
         print e.dxftype
         if e.dxftype == 'LINE':
-            # print (e.start, e.end)
+            print (e.start, e.end)
             # 找封闭的多边形
             # 线条不按顺序画
             end_key = '{}x{}'.format(e.end[0], e.end[1])
