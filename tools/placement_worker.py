@@ -1,25 +1,21 @@
 # -*- coding: utf-8 -*-
 import json
-from nfp_utls import polygon_areas, almost_equal, rotate_polygon, get_polygon_bounds
+from nfp_utls import almost_equal, rotate_polygon, get_polygon_bounds, polygon_area
 import copy
 import pyclipper
 
 
 class PlacementWorker():
-
-    def __init__(self, bin_polygon, paths, ids, rotations, config, nfpCache):
+    def __init__(self, bin_polygon, paths, ids, rotations, config, nfp_cache):
         self.bin_polygon = bin_polygon
-        # paths = [[id, shape, rotation],[]]
         self.paths = copy.deepcopy(paths)
-        self.ids = ids
+        self.ids = ids       # 图形原来的ID顺序
         self.rotations = rotations
         self.config = config
-        self.nfpCache = nfpCache or {}
-        # return a placement for the paths/rotations given
-        # happens inside a web worker
+        self.nfpCache = nfp_cache or {}
 
     def place_paths(self):
-
+        # 排列图形
         if self.bin_polygon is None:
             return None
 
@@ -33,10 +29,12 @@ class PlacementWorker():
             rotated.append(r)
 
         paths = rotated
+        # 保存所有转移数据
         all_placements = list()
+        # 基因组的适应值
         fitness = 0
-        bin_area = abs(polygon_areas(self.bin_polygon['points']))
-        min_width = min_area = min_x = None
+        bin_area = abs(polygon_area(self.bin_polygon['points']))
+        min_width = None
         while len(paths) > 0:
             placed = list()
             placements = list()
@@ -116,8 +114,6 @@ class PlacementWorker():
                     for k in range(0, len(nfp)):
                         clone = [[np['x'] + placements[j]['x'], np['y'] + placements[j]['y']] for np in nfp[k]]
                         clone = pyclipper.CleanPolygon(clone)
-                        area = abs(pyclipper.Area(clone))
-                        # print 'clone area:', area
                         if len(clone) > 2:
                             clipper.AddPath(clone, pyclipper.PT_SUBJECT, True)
                 combine_nfp = clipper.Execute(pyclipper.CT_UNION, pyclipper.PFT_NONZERO, pyclipper.PFT_NONZERO)
@@ -138,7 +134,6 @@ class PlacementWorker():
                 finalNfp = pyclipper.CleanPolygons(finalNfp)
 
                 for j in range(len(finalNfp)-1, -1, -1):
-                    # area = abs(pyclipper.Area(finalNfp[j]))
                     if len(finalNfp[j]) < 3:
                         finalNfp.pop(j)
                 if len(finalNfp) == 0:
@@ -152,7 +147,7 @@ class PlacementWorker():
 
                 for nf in finalNfp:
 
-                    if polygon_areas(nf) < 2:
+                    if abs(polygon_area(nf)) < 2:
                         continue
 
                     for p_nf in nf:

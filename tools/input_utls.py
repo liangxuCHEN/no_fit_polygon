@@ -3,23 +3,23 @@ import dxfgrabber
 
 
 def find_shape_from_dxf(file_name):
+    """
+    读取DXF文档，从LINE里面找出多边形
+    :param file_name: 文档路径
+    :return:
+    """
     dxf = dxfgrabber.readfile(file_name)
     all_shapes = list()
     new_polygon = dict()
     for e in dxf.entities:
-        if e.dxftype == 'LWPOLYLINE':
-            # all_shapes.append(e.points)
-            print (e.points)
-        print e.dxftype
         if e.dxftype == 'LINE':
-            print (e.start, e.end)
+            # print (e.start, e.end)
             # 找封闭的多边形
             # 线条不按顺序画
             end_key = '{}x{}'.format(e.end[0], e.end[1])
             star_key = '{}x{}'.format(e.start[0], e.start[1])
             if new_polygon.has_key(end_key):
                 # 找到闭合的多边形
-                # new_polygon[end_key].append([e.start[0], e.start[1]])
                 all_shapes.append(new_polygon[end_key])
                 new_polygon.pop(end_key)
                 continue
@@ -27,7 +27,6 @@ def find_shape_from_dxf(file_name):
             # 开始和结束点转换
             if new_polygon.has_key(star_key):
                 # 找到闭合的多边形
-                # new_polygon[star_key].append([e.end[0], e.end[1]])
                 all_shapes.append(new_polygon[star_key])
                 new_polygon.pop(star_key)
                 continue
@@ -52,7 +51,6 @@ def find_shape_from_dxf(file_name):
 
 def input_polygon(dxf_file):
     """
-    从文中
     :param dxf_file: 文件地址
     :param is_class: 返回Polygon 类，或者通用的 list
     :return:

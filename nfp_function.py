@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from tools import placement_worker, nfp_utls, input_utls
+from tools import placement_worker, nfp_utls
 import math
 import json
 import random
@@ -10,7 +10,7 @@ import matplotlib.patches as patches
 import pyclipper
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 from matplotlib.figure import Figure
-from settings import SPACING, ROTATIONS, BIN_HEIGHT
+from settings import SPACING, ROTATIONS, BIN_HEIGHT, POPULATION_SIZE, MUTA_RATE
 
 
 class Nester:
@@ -35,8 +35,8 @@ class Nester:
             'curveTolerance': 0.3,  # 允许的最大误差转换贝济耶和圆弧线段。在SVG的单位。更小的公差将需要更长的时间来计算
             'spacing': SPACING,           # 组件间的间隔
             'rotations': ROTATIONS,         # 旋转的颗粒度，360°的n份，如：4 = [0, 90 ,180, 270]
-            'populationSize': 10,    # 基因群数量
-            'mutationRate': 15,      # 变异概率
+            'populationSize': POPULATION_SIZE,    # 基因群数量
+            'mutationRate': MUTA_RATE,      # 变异概率
             'useHoles': False,       # 是否有洞，暂时都是没有洞
             'exploreConcave': False  # 寻找凹面，暂时是否
         }

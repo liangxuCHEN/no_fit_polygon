@@ -1,23 +1,17 @@
 # -*- coding: utf-8 -*-
 import copy
 import math
-TOL = 0.0000001
-
-
-def polygon_areas(points):
-    total_areas = 0
-    num = len(points)
-    for i in range(0, num):
-        end_point = points[(i+1) % num]
-        if isinstance(end_point, dict):
-            total_areas += points[i]['x'] * end_point['y'] - end_point['x'] * points[i]['y']
-        else:
-            total_areas += points[i][0] * end_point[1] - end_point[0] * points[i][1]
-
-    return 0.5 * total_areas
+TOL = 0.0000001   # 计算过程中误差忽略值
 
 
 def almost_equal(a, b, tolerance=None):
+    """
+    A，B 两点是否约为相同
+    :param a: 坐标
+    :param b: 坐标
+    :param tolerance: 误差值
+    :return:
+    """
     if tolerance is None:
         tolerance = TOL
     return abs(a - b) < tolerance
@@ -97,7 +91,6 @@ def on_segment(A, B, p):
 
 def nfp_rectangle(A, B):
     """
-
     :param A: {x:12, y:10}
     :param B: {x:12, y:10}
     :return:
@@ -518,7 +511,7 @@ def point_in_polygon(point, polygon):
         if on_segment({'x': xi, 'y': yi}, {'x':xj, 'y':yj}, point):
             return None  # exactly on the segment
 
-        if almost_equal(xi,xj) and almost_equal(yi,yj):
+        if almost_equal(xi, xj) and almost_equal(yi, yj):
             # ignore very small lines
             continue
 
@@ -622,7 +615,7 @@ def intersect(A, B):
     return False
 
 
-def line_intersect(A, B, E, F,infinite=None):
+def line_intersect(A, B, E, F, infinite=None):
     """
     returns the intersection of AB and EF, or null if there are no intersections or other numerical error
     if the infinite flag is set, AE and EF describe infinite lines without endpoints,
@@ -667,7 +660,7 @@ def line_intersect(A, B, E, F,infinite=None):
 
 def polygon_projection_distance(A, B, direction):
     """
-    project each point of B onto A in the given direction, and return the
+    project each point of B onto A in the given direction, and return the distance
     :param A:
     :param B:
     :param direction:
@@ -776,7 +769,7 @@ def polygon_slide_distance(A, B, direction, ignorenegative):
                 continue
 
             d = segment_distance(A1, A2, B1, B2, dir_point)
-            if d and (distance is None or d <distance):
+            if d and (distance is None or d < distance):
                 if not ignorenegative or d > 0 or almost_equal(d, 0):
                     distance = d
     return distance
@@ -945,6 +938,7 @@ def rotate_polygon(polygon, angle):
 
 
 def get_polygon_bounds(polygon):
+    # 最小包络矩阵
     if polygon is None or len(polygon) < 3:
         return None
 

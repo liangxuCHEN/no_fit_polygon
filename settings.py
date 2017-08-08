@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 
+POPULATION_SIZE = 10  # 基因组数
+MUTA_RATE = 20        # 变异概率
 ROTATIONS = 1    # 旋转选择， 1： 不能旋转
 # 单位都是MM(毫米)
 SPACING = 2      # 图形间隔空间
